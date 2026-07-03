@@ -1,0 +1,26 @@
+# Simulation outputs
+sim/
+waves/
+*.vcd
+*.fst
+*.lxt
+*.lxt2
+*.vvp
+*.out
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# EDA/tool outputs
+reports/
+runs/
+openlane/runs/
+*.log
+*.rpt
+
+# OS/editor
+.DS_Store
+.vscode/
