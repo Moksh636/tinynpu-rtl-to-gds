@@ -1,34 +1,73 @@
-# TinyNPU RTL-to-GDS Project
+# TinyPC-NPU FPGA SoC
 
-TinyNPU is a small INT8 matrix-multiply accelerator project focused on ASIC/VLSI learning.
+TinyPC-NPU is a SystemVerilog project to build a small FPGA-based computer system with a CPU-controlled INT8 neural processing accelerator.
 
-## Project Goals
+## Final Goal
 
-1. Design a synthesizable INT8 matrix-multiply accelerator in SystemVerilog.
-2. Verify the design using a Python golden model and self-checking testbench.
-3. Add assertions, coverage, and regression tests.
-4. Bring the design onto FPGA with a simple host interface.
-5. Run the design through an OpenLane/OpenROAD RTL-to-GDS physical design flow.
-6. Document architecture, verification, timing, area, utilization, and layout results.
+Build a tiny computer system on FPGA with:
 
-## Initial Target
+- 5-stage RISC-V-style CPU
+- RAM and boot ROM
+- memory-mapped bus
+- UART terminal interface
+- VGA text display
+- INT8 TinyNPU matrix-multiply accelerator
+- Python golden-model checking
+- SystemVerilog verification
+- FPGA hardware demo
+- OpenLane/OpenROAD backend reports for key blocks
 
-Compute:
+## Current Progress
+
+Completed so far:
+
+- GitHub repo and Linux/WSL toolchain setup
+- signed MAC unit
+- self-checking MAC testbench
+- sequential 4x4 INT8 TinyNPU core
+- Python golden model
+- basic project test target
+
+## System Vision
+
+Laptop terminal or Python host app communicates with the FPGA over UART. The FPGA system boots a small CPU from ROM. The CPU writes matrix data into the TinyNPU accelerator, starts computation, waits for completion, reads the result, and prints or displays PASS/FAIL.
+
+## Planned System Architecture
+
+```text
+Laptop / Python Host
+        |
+      UART
+        |
+TinyPC-NPU FPGA SoC
+        |
++-------+-----------------------------+
+| CPU   | RAM | ROM | UART | Display |
++-------+-----------------------------+
+        |
+   Memory-Mapped Bus
+        |
+     TinyNPU
+```
+
+## TinyNPU Function
+
+The accelerator computes:
 
 C = A x B
 
 Where:
+
 - A is a 4x4 signed INT8 matrix
 - B is a 4x4 signed INT8 matrix
-- C is a 4x4 signed INT32 matrix
+- C is a 4x4 signed INT32 result matrix
 
-## Planned Project Stages
+## Build and Test
 
-1. TinyNPU core RTL
-2. SystemVerilog simulation testbench
-3. Python golden model
-4. Randomized regression testing
-5. Assertions and coverage
-6. FPGA demo
-7. OpenLane/OpenROAD physical implementation
-8. Final project report and resume-ready documentation
+Activate the Python environment:
+
+source .venv/bin/activate
+
+Run all current tests:
+
+make test
