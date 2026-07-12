@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    name: RTL and Python Tests
+    name: RTL, Model, Lint, and Synthesis
     runs-on: ubuntu-latest
 
     steps:
@@ -23,13 +23,19 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - name: Install Icarus Verilog
+      - name: Install EDA tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y iverilog
+          sudo apt-get install -y iverilog verilator yosys
 
       - name: Install Python dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Run complete regression
+      - name: Run RTL and Python regression
         run: make test
+
+      - name: Run strict Verilator lint
+        run: make lint
+
+      - name: Run Yosys synthesizability check
+        run: make synth-check
