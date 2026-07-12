@@ -21,6 +21,7 @@ module tinynpu_random_tb;
 
     logic [ADDR_WIDTH-1:0] result_addr;
     logic signed [ACC_WIDTH-1:0] result_data;
+    logic result_sample;
 
     logic busy;
     logic done;
@@ -57,6 +58,31 @@ module tinynpu_random_tb;
         .result_data(result_data),
         .busy(busy),
         .done(done)
+    );
+
+    tinynpu_assertions #(
+        .MAX_BUSY_CYCLES(MAX_CYCLES)
+    ) u_assertions (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start(start),
+        .load_en(load_en),
+        .busy(busy),
+        .done(done)
+    );
+
+    tinynpu_coverage #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .ACC_WIDTH(ACC_WIDTH)
+    ) u_coverage (
+        .clk(clk),
+        .rst_n(rst_n),
+        .load_en(load_en),
+        .load_data(load_data),
+        .busy(busy),
+        .done(done),
+        .result_sample(result_sample),
+        .result_data(result_data)
     );
 
     initial begin
@@ -142,6 +168,10 @@ module tinynpu_random_tb;
 
                 actual_value = $signed(result_data);
 
+                result_sample = 1'b1;
+                #1;
+                result_sample = 1'b0;
+
                 if (actual_value !== expected[index]) begin
                     case_errors = case_errors + 1;
                     total_errors = total_errors + 1;
@@ -176,7 +206,8 @@ module tinynpu_random_tb;
         load_addr   = '0;
         load_data   = '0;
         start       = 1'b0;
-        result_addr = '0;
+        result_addr  = '0;
+        result_sample = 1'b0;
         total_errors = 0;
 
         repeat (3) @(posedge clk);
@@ -256,6 +287,8 @@ module tinynpu_random_tb;
         end
 
         $fclose(vector_file);
+
+        u_coverage.report_and_check(num_cases);
 
         if (total_errors != 0) begin
             $fatal(

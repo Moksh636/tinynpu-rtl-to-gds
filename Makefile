@@ -53,9 +53,14 @@ sim/tinynpu_core_tb.vvp: rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_core_tb.
 	mkdir -p sim waves
 	$(IVERILOG) $(SVFLAGS) -o $@ rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_core_tb.sv
 
-sim/tinynpu_random_tb.vvp: rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_random_tb.sv
+sim/tinynpu_random_tb.vvp: rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_assertions.sv tb/tinynpu_coverage.sv tb/tinynpu_random_tb.sv
 	mkdir -p sim waves
-	$(IVERILOG) $(SVFLAGS) -o $@ rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_random_tb.sv
+	$(IVERILOG) $(SVFLAGS) -o $@ \
+		rtl/mac_unit.sv \
+		rtl/tinynpu_core.sv \
+		tb/tinynpu_assertions.sv \
+		tb/tinynpu_coverage.sv \
+		tb/tinynpu_random_tb.sv
 
 clean:
 	rm -rf sim waves .pytest_cache model/__pycache__
