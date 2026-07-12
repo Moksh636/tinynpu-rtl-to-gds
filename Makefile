@@ -1,8 +1,16 @@
-IVERILOG = iverilog
-VVP      = vvp
-SVFLAGS  = -g2012
+IVERILOG ?= iverilog
+VVP       ?= vvp
+VERILATOR ?= verilator
+YOSYS     ?= yosys
+PYTHON    ?= python3
+SVFLAGS   ?= -g2012
 
-.PHONY: mac core model test clean
+RANDOM_CASES ?= 25
+RANDOM_SEED  ?= 20260711
+
+RTL_SRCS := rtl/mac_unit.sv rtl/tinynpu_core.sv
+
+.PHONY: mac core random model test lint synth-check check clean
 
 mac: sim/mac_unit_tb.vvp
 	$(VVP) sim/mac_unit_tb.vvp
@@ -10,18 +18,49 @@ mac: sim/mac_unit_tb.vvp
 core: sim/tinynpu_core_tb.vvp
 	$(VVP) sim/tinynpu_core_tb.vvp
 
-model:
-	pytest -q model
+random: sim/random_vectors.txt sim/tinynpu_random_tb.vvp
+	$(VVP) sim/tinynpu_random_tb.vvp
 
-test: mac core model
+model:
+	$(PYTHON) -m pytest -q model
+
+test: mac core random model
+
+lint:
+	$(VERILATOR) \
+		--lint-only \
+		-Wall \
+		--top-module tinynpu_core \
+		$(RTL_SRCS)
+
+synth-check:
+	$(YOSYS) -q -p 'read_verilog -sv $(RTL_SRCS); hierarchy -check -top tinynpu_core; proc; opt; check; stat'
+
+check: test lint synth-check
+
+sim/random_vectors.txt: model/generate_vectors.py model/golden_model.py
+	mkdir -p sim
+	$(PYTHON) model/generate_vectors.py \
+		--output $@ \
+		--random-cases $(RANDOM_CASES) \
+		--seed $(RANDOM_SEED)
 
 sim/mac_unit_tb.vvp: rtl/mac_unit.sv tb/mac_unit_tb.sv
 	mkdir -p sim waves
-	$(IVERILOG) $(SVFLAGS) -o sim/mac_unit_tb.vvp rtl/mac_unit.sv tb/mac_unit_tb.sv
+	$(IVERILOG) $(SVFLAGS) -o $@ rtl/mac_unit.sv tb/mac_unit_tb.sv
 
 sim/tinynpu_core_tb.vvp: rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_core_tb.sv
 	mkdir -p sim waves
-	$(IVERILOG) $(SVFLAGS) -o sim/tinynpu_core_tb.vvp rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_core_tb.sv
+	$(IVERILOG) $(SVFLAGS) -o $@ rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_core_tb.sv
+
+sim/tinynpu_random_tb.vvp: rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_assertions.sv tb/tinynpu_coverage.sv tb/tinynpu_random_tb.sv
+	mkdir -p sim waves
+	$(IVERILOG) $(SVFLAGS) -o $@ \
+		rtl/mac_unit.sv \
+		rtl/tinynpu_core.sv \
+		tb/tinynpu_assertions.sv \
+		tb/tinynpu_coverage.sv \
+		tb/tinynpu_random_tb.sv
 
 clean:
 	rm -rf sim waves .pytest_cache model/__pycache__

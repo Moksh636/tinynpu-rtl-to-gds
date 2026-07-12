@@ -14,10 +14,15 @@ module mac_unit #(
     localparam int PROD_WIDTH = A_WIDTH + B_WIDTH;
 
     logic signed [PROD_WIDTH-1:0] product;
+    logic signed [ACC_WIDTH-1:0]  product_extended;
 
-    always_comb begin
-        product = a * b;
-        acc_out = acc_in + product;
-    end
+    assign product = a * b;
+
+    assign product_extended = {
+        {(ACC_WIDTH-PROD_WIDTH){product[PROD_WIDTH-1]}},
+        product
+    };
+
+    assign acc_out = acc_in + product_extended;
 
 endmodule
