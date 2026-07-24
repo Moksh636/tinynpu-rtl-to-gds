@@ -4,77 +4,126 @@
 [![GitHub Release](https://img.shields.io/github/v/release/Moksh636/tinynpu-rtl-to-gds?include_prereleases)](https://github.com/Moksh636/tinynpu-rtl-to-gds/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-TinyPC-NPU is a SystemVerilog hardware project that is being developed into a
-small FPGA computer with a pipelined CPU and a CPU-controlled INT8 neural
-processing accelerator.
+TinyPC-NPU is a SystemVerilog hardware project being developed toward a small
+FPGA computer with a pipelined CPU and a CPU-controlled INT8 neural-processing
+accelerator.
 
-> **Project status:** `v0.1.0-alpha`
+> **Project status:** `v0.2.0-alpha`
 >
-> The verified TinyNPU accelerator foundation is implemented. The CPU, SoC
-> bus, memories, UART, VGA output, FPGA integration, and ASIC backend flow are
-> active roadmap items and are not yet complete.
+> The parameterized TinyNPU accelerator and its hardened verification flow are
+> implemented. The memory-mapped wrapper, CPU, SoC bus, memories, UART, VGA,
+> FPGA integration, and ASIC backend flow remain roadmap items.
 
 ## Current Release
 
-The current alpha release contains:
+`v0.2.0-alpha` strengthens the accelerator foundation with reproducible,
+hardware-versus-model verification:
 
-- Signed INT8 multiply-accumulate datapath
+- Parameterized signed INT8 matrix-multiplication core
 - Signed INT32 accumulation
-- Sequential 4x4 matrix-multiplication core
-- Controller for row, column, and inner-product traversal
-- Self-checking SystemVerilog testbenches
-- Python/NumPy golden model
-- Pytest verification
-- Makefile regression flow
-- GitHub Actions continuous integration
+- Deterministic Python-generated RTL vectors
+- Five directed matrix cases and 25 randomized cases by default
+- Self-checking comparison of every result element
+- Protocol and timeout assertions
+- Functional coverage counters with enforced coverage goals
+- Strict Verilator lint
+- Yosys synthesizability checks
+- Makefile regression and GitHub Actions CI
 
-## Current Verification Results
+The implemented accelerator is still a standalone compute block. It does not
+yet expose a memory-mapped software interface.
 
-The complete regression checks:
+## Verified Release Results
 
-- 10 directed signed MAC cases
-- All 16 outputs of a 4x4 matrix multiplication
-- Positive and negative operand combinations
-- Zero behavior
-- Existing-accumulator behavior
-- INT8 boundary values
-- 4 Python golden-model tests
+The `v0.2.0-alpha` release gate completed with:
 
-Current result:
+```text
+Directed MAC cases:          10 passed
+Fixed matrix outputs:        16 passed
+Vector campaign:             30/30 cases passed
+Vector result samples:       480
+RTL/model mismatches:        0
+Python golden-model tests:   4 passed
+Assertion failures:          0
+Coverage goals missed:       0
+Verilator lint:              passed
+Yosys design check:          passed
+```
 
-~~~text
-MAC failures:               0
-Matrix-result mismatches:   0
-Python test failures:       0
-~~~
+Default deterministic campaign:
 
-## TinyNPU Baseline Architecture
+```text
+Directed matrix cases:       5
+Randomized matrix cases:     25
+Random seed:                 20260711
+Computation latency:         64 busy cycles per 4x4 case
+```
 
-The v0.1.0-alpha accelerator uses a single MAC datapath to calculate a 4x4
-matrix product sequentially.
+Functional coverage observed in the release run:
 
-~~~text
-Matrix A Storage ─┐
-                  ├──> Controller ──> Signed MAC ──> Result Storage
-Matrix B Storage ─┘         │
-                            └── row / column / inner index control
-~~~
+```text
+Operand loads:               960
+Positive input values:       461
+Negative input values:       439
+Zero input values:           60
+INT8 minimum values:         13
+INT8 maximum values:         28
+Busy cycles:                 1920
+Done events:                 30
+Positive output values:      228
+Negative output values:      234
+Zero output values:          18
+```
 
-The mathematical operation is:
+## Accelerator Architecture
 
-~~~text
-C = A × B
-~~~
+The current design computes:
 
-Where:
+```text
+C = A x B
+```
 
-- `A` is a 4x4 signed INT8 matrix
-- `B` is a 4x4 signed INT8 matrix
-- `C` is a 4x4 signed INT32 result matrix
+where `A` and `B` are signed INT8 matrices and `C` is a signed INT32 result
+matrix.
+
+```text
+              load interface
+                    |
+       +------------+------------+
+       |                         |
++------+-------+          +------+-------+
+| Matrix A RAM |          | Matrix B RAM |
++------+-------+          +------+-------+
+       |                         |
+       +------------+------------+
+                    |
+             +------+------+
+             | Signed MAC  |
+             +------+------+
+                    |
+             +------+------+
+             | Result RAM  |
+             +-------------+
+                    ^
+                    |
+       IDLE -> COMPUTE -> DONE controller
+          row / column / inner-product indices
+```
+
+The baseline uses one MAC datapath and performs one multiply-accumulate per
+compute cycle. For the default 4x4 configuration, one matrix product requires
+`4^3 = 64` busy cycles.
+
+See:
+
+- [Architecture](docs/architecture.md)
+- [Microarchitecture](docs/microarchitecture.md)
+- [Verification plan](docs/verification_plan.md)
+- [Engineering case study](docs/engineering_case_study.md)
 
 ## Planned Final SoC
 
-~~~text
+```text
 Laptop / Python Host
          |
         UART
@@ -94,22 +143,12 @@ Laptop / Python Host
 |              | Accelerator|                        |
 |              +------------+                        |
 +----------------------------------------------------+
-~~~
+```
 
-The planned final system includes:
-
-- Custom 5-stage RV32I-compatible CPU
-- Forwarding and hazard detection
-- Pipeline stalls and flushes
-- Boot ROM and system RAM
-- Memory-mapped internal bus
-- UART terminal and boot interface
-- VGA text display
-- CPU-controlled INT8 TinyNPU
-- Bare-metal firmware
-- FPGA synthesis, implementation, and timing closure
-- OpenLane/OpenROAD backend analysis
-- PPA comparison of multiple accelerator architectures
+The planned system includes a custom RV32I-compatible pipeline, memories,
+internal interconnect, UART, VGA text output, bare-metal firmware, FPGA timing
+closure, and an OpenLane/OpenROAD PPA study. These blocks are future scope and
+are not part of this alpha release.
 
 ## Quick Start
 
@@ -119,107 +158,91 @@ The planned final system includes:
 - GNU Make
 - Python 3
 - Icarus Verilog
+- Verilator
+- Yosys
 - NumPy
 - Pytest
 
-### Set Up the Python Environment
+### Set Up Python
 
-~~~bash
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-~~~
+```
 
-### Run the Complete Regression
+### Run the Complete Release Gate
 
-~~~bash
+```bash
 make clean
-make test
-~~~
+make check
+```
 
-### Run Individual Test Groups
+### Run Individual Checks
 
-~~~bash
+```bash
 make mac
 make core
+make random
 make model
-~~~
+make lint
+make synth-check
+```
+
+Override the random campaign while preserving reproducibility:
+
+```bash
+make clean
+make random RANDOM_CASES=100 RANDOM_SEED=12345
+```
 
 ### Open Waveforms
 
-After running the RTL tests:
-
-~~~bash
+```bash
 gtkwave waves/mac_unit.vcd
 gtkwave waves/tinynpu_core.vcd
-~~~
+gtkwave waves/tinynpu_random.vcd
+```
 
 ## Repository Structure
 
-~~~text
-rtl/                 Synthesizable SystemVerilog RTL
-tb/                  Self-checking SystemVerilog testbenches
-model/               Python golden model and tests
-docs/                Architecture, verification, and release documents
-scripts/             Automation scripts
-fpga/                Future FPGA constraints and build files
-openlane/            Future ASIC backend configuration
-.github/workflows/   Continuous-integration configuration
-waves/               Generated simulation waveforms
-sim/                 Generated simulation executables
-reports/             Generated reports
-~~~
-
-Generated simulation files, waveforms, virtual environments, and reports are
-excluded from version control.
-
-## Engineering Case Study
-
-A detailed engineering case study is being developed alongside this project
-and will be expanded as each milestone is completed.
-
-The case study will document:
-
-- Architecture and microarchitecture decisions
-- Design tradeoffs and alternative approaches
-- Verification strategy and test development
-- Bugs encountered and how they were resolved
-- Waveform analysis and debugging examples
-- CPU, bus, memory, and accelerator integration
-- FPGA synthesis, utilization, and timing results
-- ASIC area, timing, power, and PPA comparisons
-- Lessons learned throughout the development process
-
-> **Case study status:** In progress. New sections, measurements, diagrams,
-> and results will be added as the project advances from the accelerator
-> foundation to the complete FPGA SoC and ASIC backend exploration.
+```text
+rtl/                 Synthesizable accelerator RTL
+tb/                  Directed, randomized, assertion, and coverage RTL
+model/               Python golden model and vector generator
+docs/                Architecture, plans, case study, and release notes
+.github/workflows/   GitHub Actions continuous integration
+sim/                 Generated simulation files (ignored)
+waves/               Generated waveform files (ignored)
+reports/             Generated local reports (ignored)
+```
 
 ## Development Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the planned CPU, SoC, UART, VGA, FPGA, and
-ASIC implementation stages.
+See [ROADMAP.md](ROADMAP.md). The next implementation milestone is a
+memory-mapped accelerator wrapper with software-visible control, status,
+operand, and result registers.
 
 ## Skills Demonstrated
 
-This project is intended to demonstrate practical experience with:
-
 - SystemVerilog RTL design
-- Self-checking hardware verification
 - Signed fixed-width arithmetic
-- Finite-state-machine design
-- Datapath and controller separation
-- Computer architecture
-- Memory-mapped peripheral design
+- Parameterized hardware design
+- Finite-state-machine control
+- Self-checking testbench development
 - Python reference modeling
-- Regression automation
-- FPGA design flow
-- ASIC synthesis and physical-design exploration
-- Git and continuous integration
+- Deterministic constrained-random-style stimulus
+- Assertions and timeout protection
+- Functional coverage and closure checks
+- Verilator lint and Yosys synthesis checks
+- Regression automation and continuous integration
+- Git-based milestone and release management
 
 ## Release Notes
 
-See the [v0.1.0-alpha release notes](docs/releases/v0.1.0-alpha.md).
+- [v0.2.0-alpha](docs/releases/v0.2.0-alpha.md)
+- [v0.1.0-alpha](docs/releases/v0.1.0-alpha.md)
 
 ## License
 
-This project is released under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).

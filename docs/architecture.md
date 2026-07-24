@@ -1,49 +1,144 @@
 # TinyNPU Architecture
 
-## Overview
+## Scope
 
-TinyNPU is a small INT8 matrix-multiply accelerator. The first version computes a 4x4 matrix multiplication:
+The implemented `v0.2.0-alpha` block is a standalone signed-integer matrix
+accelerator. It accepts two matrices through a load interface, computes their
+product, and exposes the result through an indexed read port.
 
+The current release does **not** contain a CPU, bus wrapper, UART, VGA block,
+boot ROM, RAM, firmware, FPGA top level, or physical-design implementation.
+
+## Mathematical Operation
+
+```text
 C = A x B
+```
 
-A and B contain signed 8-bit integers. C contains signed 32-bit accumulated results.
+For the default parameters:
+
+- `A`: 4x4 signed INT8
+- `B`: 4x4 signed INT8
+- `C`: 4x4 signed INT32
+
+Each output is calculated as:
+
+```text
+C[i][j] = sum(A[i][k] * B[k][j]), k = 0 ... N-1
+```
+
+## External Interface
+
+| Signal | Direction | Purpose |
+|---|---:|---|
+| `clk` | input | Rising-edge clock |
+| `rst_n` | input | Active-low asynchronous controller reset |
+| `load_en` | input | Loads one operand element while idle |
+| `load_sel` | input | Selects matrix A (`0`) or B (`1`) |
+| `load_addr` | input | Linear operand-memory address |
+| `load_data` | input | Signed operand value |
+| `start` | input | Starts a loaded matrix operation |
+| `result_addr` | input | Linear result-memory address |
+| `result_data` | output | Signed result value |
+| `busy` | output | High during matrix computation |
+| `done` | output | High after completion until `start` is low |
 
 ## Main Blocks
 
-1. `tinynpu_top`
-   - Top-level wrapper.
-   - Connects control, input buffers, compute datapath, and output buffer.
+```text
++----------------+       +----------------+
+| Matrix A memory|       | Matrix B memory|
++-------+--------+       +--------+-------+
+        |                         |
+        +------------+------------+
+                     |
+              +------+------+
+              |  mac_unit   |
+              +------+------+
+                     |
+              +------+------+
+              | Matrix C RAM|
+              +-------------+
+                     ^
+                     |
+             controller and indices
+```
 
-2. `reg_file`
-   - Stores control and status registers.
-   - Later versions may expose these through APB-lite or UART.
+### Operand Memories
 
-3. `matmul_ctrl`
-   - FSM controlling load, compute, and done states.
+Two local arrays store `N*N` signed operand elements. Loads are accepted only
+in `S_IDLE`. The memories intentionally do not reset because every operand is
+loaded before use; avoiding reset also improves future FPGA memory inference.
 
-4. `mac_unit`
-   - Signed multiply-accumulate unit.
+### MAC Datapath
 
-5. Input buffers
-   - Store matrix A and matrix B.
+`mac_unit` performs a signed multiplication and explicitly sign-extends the
+product to the accumulator width before addition. This avoids implicit-width
+behavior and supports strict linting.
 
-6. Output buffer
-   - Stores matrix C.
+### Result Memory
 
-## First Milestone
+The result array stores one signed accumulated value for each output element.
+An output is written when the final inner-product term is processed.
 
-The first milestone is simulation-only:
+### Controller
 
-- Load fixed matrices into the testbench.
-- Run TinyNPU.
-- Compare output against expected C values.
-- Print PASS or FAIL.
+The controller tracks row `i`, column `j`, and inner-product index `k`. It
+iterates in row-major output order and drives a single MAC datapath.
 
-## Later Milestones
+## State Machine
 
-- Python golden model
-- Randomized tests
-- Assertions
-- Coverage counters
-- FPGA demo
-- OpenLane/OpenROAD physical design
+```text
+          start
+IDLE --------------> COMPUTE
+ ^                       |
+ |                       | final i,j,k
+ | start == 0            v
+ +-------------------- DONE
+```
+
+- `S_IDLE`: accepts operand loads and waits for `start`.
+- `S_COMPUTE`: performs one multiply-accumulate per cycle.
+- `S_DONE`: asserts `done`; returns to idle after `start` is deasserted.
+
+`busy` and `done` are derived directly from the controller state and are
+mutually exclusive.
+
+## Addressing
+
+Matrices use row-major linear addressing:
+
+```text
+A index = i*N + k
+B index = k*N + j
+C index = i*N + j
+```
+
+## Latency and Throughput
+
+The baseline architecture contains one MAC datapath, so computation requires:
+
+```text
+N * N * N = N^3 busy cycles
+```
+
+At `N=4`, the measured computation time is 64 busy cycles per matrix pair.
+Operand loading and result sampling occur outside this compute interval.
+
+## Parameters
+
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `N` | 4 | Square-matrix dimension |
+| `DATA_WIDTH` | 8 | Signed operand width |
+| `ACC_WIDTH` | 32 | Signed accumulator/result width |
+| `ADDR_WIDTH` | `$clog2(N*N)` | Linear memory-address width |
+
+The RTL is parameterized, while the current Python model and randomized
+verification campaign remain intentionally fixed at 4x4 INT8/INT32.
+
+## Next Integration Boundary
+
+The next milestone wraps this interface with software-visible registers. That
+wrapper will own operand/result addressing, legal-operation checks, and bus
+responses while preserving `tinynpu_core` as the compute engine.
