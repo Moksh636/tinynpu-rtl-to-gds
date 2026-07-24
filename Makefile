@@ -64,3 +64,6 @@ sim/tinynpu_random_tb.vvp: rtl/mac_unit.sv rtl/tinynpu_core.sv tb/tinynpu_assert
 
 clean:
 	rm -rf sim waves .pytest_cache model/__pycache__
+
+# TinyNPU APB/MMIO verification and synthesis rules
+-include mk/apb.mk
