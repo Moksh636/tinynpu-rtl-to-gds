@@ -5,150 +5,93 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 TinyPC-NPU is a SystemVerilog hardware project being developed toward a small
-FPGA computer with a pipelined CPU and a CPU-controlled INT8 neural-processing
-accelerator.
+FPGA computer with a pipelined RV32I-compatible CPU and a CPU-controlled INT8
+neural-processing accelerator.
 
-> **Project status:** `v0.2.0-alpha`
+> **Development milestone:** `v0.4.0-alpha`
 >
-> The parameterized TinyNPU accelerator and its hardened verification flow are
-> implemented. The memory-mapped wrapper, CPU, SoC bus, memories, UART, VGA,
-> FPGA integration, and ASIC backend flow remain roadmap items.
+> The TinyNPU accelerator, APB3/MMIO wrapper, internal system interconnect,
+> boot ROM, and program/data RAM are implemented. CPU, firmware, UART, timer,
+> VGA, FPGA deployment, and ASIC physical design remain roadmap items.
 
-## Current Release
+The latest published GitHub release before this milestone is
+`v0.3.0-alpha`. The v0.4 release gate has passed locally with
+`make clean && make check`; the milestone is ready for commit, CI, and tagging.
 
-`v0.2.0-alpha` strengthens the accelerator foundation with reproducible,
-hardware-versus-model verification:
-
-- Parameterized signed INT8 matrix-multiplication core
-- Signed INT32 accumulation
-- Deterministic Python-generated RTL vectors
-- Five directed matrix cases and 25 randomized cases by default
-- Self-checking comparison of every result element
-- Protocol and timeout assertions
-- Functional coverage counters with enforced coverage goals
-- Strict Verilator lint
-- Yosys synthesizability checks
-- Makefile regression and GitHub Actions CI
-
-The implemented accelerator is still a standalone compute block. It does not
-yet expose a memory-mapped software interface.
-
-## Verified Release Results
-
-The `v0.2.0-alpha` release gate completed with:
+## Implemented System
 
 ```text
-Directed MAC cases:          10 passed
-Fixed matrix outputs:        16 passed
-Vector campaign:             30/30 cases passed
-Vector result samples:       480
-RTL/model mismatches:        0
-Python golden-model tests:   4 passed
-Assertion failures:          0
-Coverage goals missed:       0
-Verilator lint:              passed
-Yosys design check:          passed
+Future RV32I CPU
+      |
+      | request / response
+      v
++-----------------------+
+| TinyPC interconnect   |
++----+-------------+----+
+     |             |
+     |             +----------------------+
+     v                                    v
+Boot ROM                               TinyNPU
+4 KiB                                  APB3/MMIO
+0x0000_0000                            0x4000_0000
+     |
+     +-------> Program/Data RAM
+               16 KiB
+               0x1000_0000
 ```
 
-Default deterministic campaign:
+The system bus accepts one outstanding request at a time. RAM supports byte
+write strobes. Boot-ROM writes, unaligned transactions, unmapped accesses,
+partial-width TinyNPU writes, and TinyNPU APB errors return a system bus error.
 
-```text
-Directed matrix cases:       5
-Randomized matrix cases:     25
-Random seed:                 20260711
-Computation latency:         64 busy cycles per 4x4 case
-```
+Future peripheral windows are reserved now so CPU software can use a stable
+memory map as UART, timer, and VGA are added.
 
-Functional coverage observed in the release run:
+See [System Memory Map](docs/system_memory_map.md).
 
-```text
-Operand loads:               960
-Positive input values:       461
-Negative input values:       439
-Zero input values:           60
-INT8 minimum values:         13
-INT8 maximum values:         28
-Busy cycles:                 1920
-Done events:                 30
-Positive output values:      228
-Negative output values:      234
-Zero output values:          18
-```
+## TinyNPU Accelerator
 
-## Accelerator Architecture
-
-The current design computes:
+The current accelerator computes:
 
 ```text
 C = A x B
 ```
 
-where `A` and `B` are signed INT8 matrices and `C` is a signed INT32 result
-matrix.
+with signed INT8 inputs and signed INT32 accumulation/results. The default
+configuration is 4x4 and uses a single MAC datapath, requiring 64 busy cycles
+for one matrix product.
 
-```text
-              load interface
-                    |
-       +------------+------------+
-       |                         |
-+------+-------+          +------+-------+
-| Matrix A RAM |          | Matrix B RAM |
-+------+-------+          +------+-------+
-       |                         |
-       +------------+------------+
-                    |
-             +------+------+
-             | Signed MAC  |
-             +------+------+
-                    |
-             +------+------+
-             | Result RAM  |
-             +-------------+
-                    ^
-                    |
-       IDLE -> COMPUTE -> DONE controller
-          row / column / inner-product indices
-```
+The v0.3 APB3 wrapper exposes control, status, operand, and result registers to
+software. The v0.4 interconnect now makes that APB peripheral reachable from
+the system bus.
 
-The baseline uses one MAC datapath and performs one multiply-accumulate per
-compute cycle. For the default 4x4 configuration, one matrix product requires
-`4^3 = 64` busy cycles.
+## Verification
 
-See:
+The accelerator verification flow includes:
 
-- [Architecture](docs/architecture.md)
-- [Microarchitecture](docs/microarchitecture.md)
-- [Verification plan](docs/verification_plan.md)
-- [Engineering case study](docs/engineering_case_study.md)
+- directed MAC and matrix tests;
+- deterministic Python-generated randomized vectors;
+- Python/NumPy golden-model comparison;
+- protocol/progress assertions and functional coverage;
+- Verilator lint;
+- Yosys synthesizability checks;
+- GitHub Actions CI.
 
-## Planned Final SoC
+v0.4 adds two system-level tests:
 
-```text
-Laptop / Python Host
-         |
-        UART
-         |
-+----------------------------------------------------+
-|                TinyPC-NPU FPGA SoC                 |
-|                                                    |
-|  +----------+       +---------------------------+  |
-|  | 5-Stage  |       | RAM / Boot ROM            |  |
-|  | CPU      |       | UART / Timer / VGA        |  |
-|  +----+-----+       +-------------+-------------+  |
-|       |                           |                |
-|       +------- Memory-Mapped Bus -+                |
-|                    |                               |
-|              +-----+------+                        |
-|              |  TinyNPU   |                        |
-|              | Accelerator|                        |
-|              +------------+                        |
-+----------------------------------------------------+
-```
+- `tinypc_interconnect_tb.sv`: ROM, RAM, byte strobes, decode boundaries,
+  unaligned/unmapped errors, NPU APB timing, and error propagation;
+- `tinypc_npu_bus_tb.sv`: CPU-style operand loading, start, polling, signed
+  result reads, and a second computation without reloading operands.
 
-The planned system includes a custom RV32I-compatible pipeline, memories,
-internal interconnect, UART, VGA text output, bare-metal firmware, FPGA timing
-closure, and an OpenLane/OpenROAD PPA study. These blocks are future scope and
-are not part of this alpha release.
+The integration test uses a signed matrix containing `-128` through `127`
+boundary values and an identity matrix, so all 16 expected INT32 outputs are
+unambiguous.
+
+The v0.4 local release gate passed the complete accelerator, APB, interconnect,
+and CPU-style TinyNPU regressions. It also passed Verilator lint and Yosys
+synthesizability checks. GitHub Actions will provide the independent clean-run
+confirmation after the milestone branch is pushed.
 
 ## Quick Start
 
@@ -178,39 +121,39 @@ make clean
 make check
 ```
 
-### Run Individual Checks
+### Run v0.4 Only
+
+```bash
+make soc
+```
+
+### Existing Individual Checks
 
 ```bash
 make mac
 make core
 make random
 make model
+make apb
 make lint
 make synth-check
 ```
 
-Override the random campaign while preserving reproducibility:
+Override the randomized accelerator campaign while preserving reproducibility:
 
 ```bash
 make clean
 make random RANDOM_CASES=100 RANDOM_SEED=12345
 ```
 
-### Open Waveforms
-
-```bash
-gtkwave waves/mac_unit.vcd
-gtkwave waves/tinynpu_core.vcd
-gtkwave waves/tinynpu_random.vcd
-```
-
 ## Repository Structure
 
 ```text
-rtl/                 Synthesizable accelerator RTL
-tb/                  Directed, randomized, assertion, and coverage RTL
+rtl/                 Synthesizable accelerator, APB, interconnect, and memory RTL
+tb/                  Directed, randomized, APB, and system-level testbenches
 model/               Python golden model and vector generator
-docs/                Architecture, plans, case study, and release notes
+mk/                  Milestone-specific Makefile rules
+docs/                Architecture, interfaces, memory map, and release notes
 .github/workflows/   GitHub Actions continuous integration
 sim/                 Generated simulation files (ignored)
 waves/               Generated waveform files (ignored)
@@ -219,27 +162,32 @@ reports/             Generated local reports (ignored)
 
 ## Development Roadmap
 
-See [ROADMAP.md](ROADMAP.md). The next implementation milestone is a
-memory-mapped accelerator wrapper with software-visible control, status,
-operand, and result registers.
+See [ROADMAP.md](ROADMAP.md). The next implementation milestone is
+`v0.5.0-alpha`: the pipelined RV32I-compatible CPU that will become the first
+real master of the v0.4 system bus.
 
 ## Skills Demonstrated
 
 - SystemVerilog RTL design
 - Signed fixed-width arithmetic
-- Parameterized hardware design
+- Parameterized accelerator design
 - Finite-state-machine control
-- Self-checking testbench development
+- APB3 peripheral integration
+- Memory-mapped register design
+- SoC address decoding and bus-error handling
+- Boot-ROM and byte-write RAM design
+- Self-checking system-level testbenches
 - Python reference modeling
-- Deterministic constrained-random-style stimulus
-- Assertions and timeout protection
-- Functional coverage and closure checks
+- Deterministic randomized verification
+- Assertions and functional coverage
 - Verilator lint and Yosys synthesis checks
 - Regression automation and continuous integration
 - Git-based milestone and release management
 
 ## Release Notes
 
+- [v0.4.0-alpha](docs/releases/v0.4.0-alpha.md)
+- [v0.3.0-alpha](docs/releases/v0.3.0-alpha.md)
 - [v0.2.0-alpha](docs/releases/v0.2.0-alpha.md)
 - [v0.1.0-alpha](docs/releases/v0.1.0-alpha.md)
 

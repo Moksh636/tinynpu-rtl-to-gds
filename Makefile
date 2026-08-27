@@ -67,3 +67,6 @@ clean:
 
 # TinyNPU APB/MMIO verification and synthesis rules
 -include mk/apb.mk
+
+# TinyPC-NPU v0.4 SoC interconnect and memory regression rules
+-include mk/soc.mk
