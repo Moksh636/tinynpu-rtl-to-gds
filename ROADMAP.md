@@ -30,22 +30,22 @@ documentation are present in the repository.
 
 ## v0.3.0-alpha: Memory-Mapped Accelerator
 
-- [ ] Freeze the TinyNPU software-visible register map
-- [ ] Implement a lightweight request/response or APB-like wrapper
-- [ ] Add control, status, start, busy, and done registers
-- [ ] Add indexed operand and result data windows
-- [ ] Define behavior for invalid addresses and writes while busy
-- [ ] Verify register reads, writes, reset values, and back-to-back operations
-- [ ] Add a software-style driver test sequence
+- [x] Freeze the TinyNPU software-visible register map
+- [x] Implement a lightweight request/response or APB-like wrapper
+- [x] Add control, status, start, busy, and done registers
+- [x] Add indexed operand and result data windows
+- [x] Define behavior for invalid addresses and writes while busy
+- [x] Verify register reads, writes, reset values, and back-to-back operations
+- [x] Add a software-style driver test sequence
 
 ## v0.4.0-alpha: SoC Interconnect and Memory
 
-- [ ] Define the complete system memory map
-- [ ] Implement the internal request/response bus
-- [ ] Implement boot ROM
-- [ ] Implement program and data RAM
-- [ ] Add bus-error and unmapped-address handling
-- [ ] Verify bus reads, writes, stalls, and peripheral decoding
+- [x] Define the complete system memory map
+- [x] Implement the internal request/response bus
+- [x] Implement boot ROM
+- [x] Implement program and data RAM
+- [x] Add bus-error and unmapped-address handling
+- [x] Verify bus reads, writes, stalls, and peripheral decoding
 
 ## v0.5.0-alpha: Pipelined CPU
 
