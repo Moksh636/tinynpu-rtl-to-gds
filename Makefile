@@ -70,3 +70,6 @@ clean:
 
 # TinyPC-NPU v0.4 SoC interconnect and memory regression rules
 -include mk/soc.mk
+
+# TinyPC-NPU v0.5 CPU development rules
+-include mk/cpu.mk
